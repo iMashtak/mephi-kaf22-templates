@@ -24,6 +24,18 @@
   under
 )
 
+#let pages-count-total() = context { counter(page).final().first() }
+#let pages-count-without-appendix() = context { counter(page).at(<appendix>).first() }
+#let appendices-count() = context { counter("appendices").final().first() }
+#let bib-counter = state("citation-counter", ())
+#let bib-count() = context { bib-counter.final().dedup().len() }
+#let images-counter = counter("images")
+#let images-count() = context { images-counter.final().first() }
+#let tables-counter = counter("tables")
+#let tables-count() = context { tables-counter.final().first() }
+#let listings-counter = counter("listings")
+#let listings-count() = context { listings-counter.final().first() }
+
 #let thesis(
   kind: [],
   kind-continuation: [],
@@ -84,6 +96,10 @@
   }
   show heading.where(level: 1): it => {
     pagebreak(weak: true)
+    counter(figure.where(kind: image)).update(0)
+    counter(figure.where(kind: table)).update(0)
+    counter(figure.where(kind: raw)).update(0)
+    counter(math.equation).update(0)
     text(it, 14pt)
   }
   show heading.where(level: 2): it => {
@@ -93,7 +109,71 @@
     align(left, text(it, 12pt))
   }
   show selector(<nonumber>): set heading(numbering: none)
-  set math.equation(numbering: "(1)")
+  show selector(<appendix>): it => {}
+  set math.equation(numbering: (num, ..) => {
+    [(#context counter(heading.where(level: 1)).display()#num)]
+  })
+  set list(indent: 1.25cm)
+  set enum(indent: 1.25cm)
+  show figure.where(kind: image): it => {
+    images-counter.step()
+    set figure.caption(position: bottom)
+    it
+  }
+  show figure.caption.where(kind: image): it => {
+    [Рисунок #context counter(heading.where(level: 1)).display()#context it.counter.display() --- #it.body]
+  }
+  show figure.where(kind: table): it => {
+    tables-counter.step()
+    set figure.caption(position: top)
+    it
+  }
+  show figure.caption.where(kind: table): it => {
+    set figure.caption(position: top)
+    align(left, [Таблица #context counter(heading.where(level: 1)).display()#context it.counter.display() --- #it.body])
+  }
+  show figure.where(kind: raw): it => {
+    listings-counter.step()
+    set figure.caption(position: top)
+    it
+  }
+  show figure.caption.where(kind: raw): it => {
+    align(left, [Листинг #context counter(heading.where(level: 1)).display()#context it.counter.display() --- #it.body])
+  }
+  show ref: it => {
+    if it.form == "page" {
+      it
+    } else {
+      let el = it.element
+      if el != none and el.func() == figure and el.kind == image {
+        link(
+          el.location(),
+          [#context counter(heading.where(level: 1)).at(el.location()).first().#counter(figure.where(kind: image)).at(el.location()).first()],
+        )
+      } else if el != none and el.func() == figure and el.kind == table {
+        link(
+          el.location(),
+          [#context counter(heading.where(level: 1)).at(el.location()).first().#counter(figure.where(kind: table)).at(el.location()).first()],
+        )
+      } else if el != none and el.func() == figure and el.kind == raw {
+        link(
+          el.location(),
+          [#context counter(heading.where(level: 1)).at(el.location()).first().#counter(figure.where(kind: raw)).at(el.location()).first()],
+        )
+      } else if el != none and el.func() == math.equation {
+        link(
+          el.location(),
+          [#context counter(heading.where(level: 1)).at(el.location()).first().#counter(math.equation).at(el.location()).first()],
+        )
+      } else {
+        it
+      }
+    }
+  }
+  show cite: it => {
+    it
+    bib-counter.update(((..c)) => (..c, it.key))
+  }
 
   // Title Page
 
@@ -277,9 +357,19 @@
     std-bibliography(bib)
   }
 
+  [
+    Приложения <appendix>
+  ]
+
+  let appendices-counter = counter("appendices")
+
   if appendices != none {
     counter(heading).update(0)
     set heading(numbering: "A.1.")
+    show heading: it => {
+      appendices-counter.step()
+      it
+    }
     appendices
   }
 }
@@ -460,14 +550,6 @@
               tasks.push(rspz-date)
               tasks.push([])
             }
-            if sections.at(i - 1) == sections.pos().last() {
-              j += 1
-              tasks.push([#i.#j.])
-              tasks.push([_Оформление пояснительной записки (ПЗ) и иллюстративного материала для доклада_])
-              tasks.push([Текст ПЗ, презентация])
-              tasks.push(pz-date)
-              tasks.push([])
-            }
             tasks
           },
         )
@@ -477,6 +559,14 @@
       result.insert(2, [#align(center, [#text([Форма\ отчётности], 12pt)])])
       result.insert(3, [#align(center, [#text([Срок\ исполнения], 12pt)])])
       result.insert(4, [#align(center, [#text([Отметка о выполнении], 12pt)\ #text([Дата, подпись], 9pt)])])
+
+      i += 1
+      result.push([#i.])
+      result.push([_Оформление пояснительной записки (ПЗ) и иллюстративного материала для доклада_])
+      result.push([Текст ПЗ, презентация])
+      result.push(pz-date)
+      result.push([])
+
       result
     }
   )
@@ -489,6 +579,7 @@
   group: "",
   teacher: "",
   bib: none,
+  task-date: none,
   body,
 ) = {
   set document(title: theme, author: author)
@@ -570,6 +661,8 @@
 
     load-bibliography(bib, full: true, style: "gost-r-705-2008-numeric")
 
+    pagebreak()
+
     align(center, [
       #text([*ЛИТЕРАТУРА*], 16pt)
     ])
@@ -594,6 +687,35 @@
         }
       )
     }
+
+    v(1fr)
+
+    table(
+      columns: (1fr, 2fr),
+      stroke: none,
+      [
+        #table(
+          stroke: none,
+          [Дата выдачи задания:],
+          if task-date != none {
+            undertext(above: [#task-date.display("[day].[month].[year]")], under: [])
+          } else {
+            ["\_\_\_" \_\_\_\_\_\_\_\_\_ 202\_г.]
+          },
+        )
+      ],
+      table(
+        columns: (1fr, 1fr, 1.5fr),
+        stroke: none,
+        [Руководитель],
+        [#undertext(under: [#text([(подпись)], 9pt)])],
+        [#undertext(above: teacher, under: [#text([(ФИО)], 9pt)])],
+
+        [Студент],
+        [#undertext(under: [#text([(подпись)], 9pt)])],
+        [#undertext(above: author, under: [#text([(ФИО)], 9pt)])],
+      ),
+    )
   }
 }
 
@@ -603,6 +725,7 @@
   group: "",
   teacher: "",
   bib: none,
+  task-date: none,
   body,
 ) = {
   task(
@@ -613,5 +736,6 @@
     group: group,
     teacher: teacher,
     bib: bib,
+    task-date: task-date,
   )
 }
