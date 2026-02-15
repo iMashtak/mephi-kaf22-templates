@@ -24,6 +24,28 @@
   under
 )
 
+#let get-numbering-alphabet(number) = {
+  let alphabet = ("а", "б", "в", "г", "д", "е", "ж", "з", "и", "к", "л", "м", "н", "о", "п", "р", "с", "т", "у", "ф", "х", "ц", "ч", "ш", "щ", "э", "ю", "я")
+  let result = ""
+
+  while number > 0 {
+    result = alphabet.at(calc.rem(number - 1, 28)) + result
+    number = calc.floor(number / 28)
+  }
+
+  return result
+}
+
+#let cyrillic-numbering(..nums) = {
+  nums = nums.pos()
+  let letter = upper(get-numbering-alphabet(nums.first()))
+  let rest = nums.slice(1).map(elem=>str(elem))
+  if rest != none {
+    return (letter, rest).flatten().join(".") + "."
+  }
+  return letter + "."
+}
+
 #let pages-count-total() = context { counter(page).final().first() }
 #let pages-count-without-appendix() = context { counter(page).at(<appendix>).first() }
 #let appendices-count() = context { counter("appendices").final().first() }
@@ -216,7 +238,10 @@
 
       #text(kind-continuation, 14pt)
 
-      #text(theme, 16pt)
+      #text({
+        set par(justify: false)
+        theme
+      }, 16pt)
 
       #line(length: 100%, stroke: (thickness: 6pt, paint: dhpat(2pt, 0.8pt), cap: "butt"))
 
@@ -365,7 +390,7 @@
 
   if appendices != none {
     counter(heading).update(0)
-    set heading(numbering: "A.1.")
+    set heading(numbering: cyrillic-numbering)
     show heading: it => {
       appendices-counter.step()
       it
